@@ -1,6 +1,6 @@
 # train_model.py
-# This script reads our expanded and augmented dataset, processes the text,
-# and uses GridSearchCV to find the best possible SVC model.
+# This script trains the intent classification model for the chatbot.
+# It uses a Support Vector Machine (SVC) with GridSearchCV for hyperparameter tuning.
 
 import json
 import pickle
@@ -12,30 +12,23 @@ from sklearn.pipeline import Pipeline
 from sklearn.model_selection import train_test_split, GridSearchCV
 from sklearn.metrics import accuracy_score, classification_report
 
-# --- Main function to wrap our logic for better error handling ---
 def train_chatbot_model():
     """
-    Reads, processes, and trains the chatbot model using GridSearchCV with an SVC.
+    Main function to read the processed dataset, train the model, and save it.
     """
     print("--- Starting Model Training ---")
 
-    # --- 1. Download necessary NLTK data ---
-    print("Ensuring NLTK models are ready...")
+    # Ensure NLTK data is available for tokenization and lemmatization
     nltk.download('punkt', quiet=True)
     nltk.download('wordnet', quiet=True)
     nltk.download('omw-1.4', quiet=True)
-    print("NLTK models are ready.")
 
-
-    # --- 2. Load and Preprocess the Data ---
-    lemmatizer = WordNetLemmatizer()
-    
-    data_file_name = 'intents_expanded.json'
-    print(f"Loading the expanded dataset: {data_file_name}...")
-    with open(data_file_name, 'r', encoding='utf-8') as file:
+    # Load the final, expanded dataset
+    with open('intents_expanded.json', 'r', encoding='utf-8') as file:
         intents = json.load(file)
-    print("Dataset loaded successfully.")
 
+    # Preprocess the text data: tokenize, lemmatize, and format for training
+    lemmatizer = WordNetLemmatizer()
     training_sentences = []
     training_tags = []
     
@@ -46,55 +39,51 @@ def train_chatbot_model():
             training_sentences.append(" ".join(lemmatized_words))
             training_tags.append(intent['tag'])
 
-    print(f"\n{len(training_sentences)} total documents found.")
-    print(f"{len(set(training_tags))} total classes found.")
+    print(f"\nTraining on {len(training_sentences)} total examples.")
 
-
-    # --- 3. Build and Tune the Machine Learning Model ---
+    # Define the model pipeline: text vectorization followed by classification
     pipeline = Pipeline([
         ('tfidf', TfidfVectorizer()),
         ('clf', SVC(class_weight='balanced', probability=True, random_state=42)),
     ])
 
-    # Define a focused set of parameters to test.
+    # Set up parameters for GridSearchCV to find the best model configuration
     parameters = {
         'tfidf__ngram_range': [(1, 1), (1, 2)],
         'clf__C': [1, 10],
-        'clf__kernel': ['linear'] # Linear kernel is often best for text data
+        'clf__kernel': ['linear']
     }
 
     grid_search = GridSearchCV(pipeline, parameters, cv=3, n_jobs=-1, verbose=2)
 
+    # Split data into training and testing sets to evaluate performance
     X_train, X_test, y_train, y_test = train_test_split(
         training_sentences, training_tags, test_size=0.2, random_state=42, stratify=training_tags
     )
 
-    print("\nStarting Hyperparameter Tuning with GridSearchCV on the expanded dataset...")
+    print("\nStarting Hyperparameter Tuning...")
     grid_search.fit(X_train, y_train)
 
-    print("\nBest parameters set found on development set:")
+    print("\nBest parameters found:")
     print(grid_search.best_params_)
 
+    # Evaluate the best model on the unseen test data
     best_model = grid_search.best_estimator_
     predictions = best_model.predict(X_test)
     accuracy = accuracy_score(y_test, predictions)
-    print(f"\nModel Accuracy on Test Data with Best Parameters: {accuracy * 100:.2f}%")
+    print(f"\nModel Accuracy on Test Data: {accuracy * 100:.2f}%")
     
-    # Print a detailed classification report
     print("\nClassification Report:")
     print(classification_report(y_test, predictions))
 
-
-    # --- 4. Save the Best Trained Model ---
-    # We will save the best model found by the grid search.
+    # Save the final trained model for use in the chatbot application
     with open('chatbot_model.pkl', 'wb') as file:
         pickle.dump(best_model, file)
 
     print("\nBest model saved to chatbot_model.pkl")
     print("--- Model Training Complete ---")
 
-
-# --- Run the training process and catch any errors ---
+# Training function is called only when the script is executed directly.
 if __name__ == "__main__":
     try:
         train_chatbot_model()
