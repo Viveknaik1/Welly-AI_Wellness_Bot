@@ -1,0 +1,15 @@
+# Virtual Environment
+.venv/
+venv/
+
+# Python cache
+__pycache__/
+*.pyc
+
+# IDE files
+.vscode/
+.idea/
+
+# A good practice is to never commit your API key.
+# If you were to create a config file for it, you would add it here.
+# config.py 
