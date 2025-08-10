@@ -1,13 +1,16 @@
 # app.py
-# This script creates the web interface for our AI Wellness Coach using Streamlit.
+# This script creates the final, polished web interface for our AI Wellness Coach
+# using the Streamlit library.
 
 import streamlit as st
-from chatbot import get_response # Import our main logic function
+import random
+# Import the final, sophisticated get_response function from our chatbot logic file
+from chatbot import get_response
 
-# --- Page Configuration ---
+# --- Streamlit Page Configuration ---
 st.set_page_config(
     page_title="Welly",
-    page_icon="👻",
+    page_icon="🤖",
     layout="centered"
 )
 
@@ -22,7 +25,7 @@ hide_streamlit_style = """
 st.markdown(hide_streamlit_style, unsafe_allow_html=True) 
 
 # --- App Title ---
-st.title("Welly 👻")
+st.title("Welly 🤖")
 st.write("Your AI Wellness Coach")
 st.write("---")
 
@@ -36,8 +39,8 @@ if "messages" not in st.session_state:
 
 # --- Display Chat History ---
 for message in st.session_state.messages:
-    # Use custom avatars for the user and the bot
-    avatar = "👻" if message["role"] == "assistant" else "🔵"
+    # Use the custom avatars you requested
+    avatar = "🤖" if message["role"] == "assistant" else "🔵"
     with st.chat_message(message["role"], avatar=avatar):
         st.markdown(message["content"])
 
@@ -55,5 +58,5 @@ if prompt := st.chat_input("How are you feeling?"):
         bot_response = get_response(prompt, history_for_bot)
     
     st.session_state.messages.append({"role": "assistant", "content": bot_response})
-    with st.chat_message("assistant", avatar="👻"):
+    with st.chat_message("assistant", avatar="🤖"):
         st.markdown(bot_response)
