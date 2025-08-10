@@ -1,7 +1,6 @@
 # chatbot.py
-# This script contains the core logic for the AI Wellness Coach.
-# It uses a hybrid approach: our custom ML model for initial intent routing,
-# and the Gemini LLM for handling contextual, multi-turn conversations.
+# This script uses a powerful HYBRID approach. It uses our custom-trained ML model
+# for the first user message and a powerful LLM for all follow-up conversation.
 
 import json
 import pickle
@@ -12,11 +11,11 @@ import requests
 import os
 from dotenv import load_dotenv
 
-# Load environment variables from a .env file for security
+# Load environment variables and API key from .env file
 load_dotenv()
 API_KEY = os.getenv("GEMINI_API_KEY")
 
-# Load all necessary files at startup
+# Load ML model and data at startup
 print("--- Starting Chatbot ---")
 model = pickle.load(open('chatbot_model.pkl', 'rb'))
 intents = json.load(open('intents_expanded.json', 'r', encoding='utf-8'))
@@ -24,17 +23,16 @@ lemmatizer = WordNetLemmatizer()
 print("All models and data loaded successfully.")
 
 def preprocess_sentence(sentence):
-    # Tokenize and lemmatize the input sentence for our ML model
+    """Tokenizes and lemmatizes a sentence for prediction."""
     word_list = nltk.word_tokenize(sentence)
     return " ".join([lemmatizer.lemmatize(w.lower()) for w in word_list])
 
 def predict_intent(processed_sentence):
-    # Use our trained scikit-learn model to predict the intent
+    """Predicts intent using the trained scikit-learn model."""
     return model.predict([processed_sentence])[0]
 
-# --- API Functions for Actionable Follow-ups ---
 def get_api_response(intent_tag):
-    # Map intents to their respective free APIs
+    """Fetches a dynamic response from a relevant free API based on the intent."""
     api_map = {
         'motivation': "https://www.boredapi.com/api/activity/",
         'sadness': "https://v2.jokeapi.dev/joke/Any?blacklistFlags=nsfw,religious,political,racist,sexist,explicit,Programming",
@@ -66,14 +64,14 @@ def get_api_response(intent_tag):
             quote = f"\"{data.get('text')}\" - {data.get('author')}"
             return f"Sometimes a moment of reflection can help. Here is a stoic quote to consider:\n{quote}"
     except Exception:
-        return "" # Return empty string if any API fails
+        return "" # Return empty string if any API call fails
 
-# --- LLM Function for Contextual Conversation ---
-def get_contextual_llm_response(user_input, chat_history, intent_tag):
+def get_contextual_llm_response(user_input, chat_history):
+    """Handles multi-turn conversation by sending context to the Gemini LLM."""
     if not API_KEY:
         return "I hear you. (LLM functionality is disabled. Please configure your GEMINI_API_KEY in the .env file.)"
 
-    print(f"Escalating to LLM for contextual response (Intent: {intent_tag})...")
+    print("Getting contextual response from LLM...")
     formatted_history = "\n".join(chat_history)
     
     prompt = f"""
@@ -84,11 +82,9 @@ def get_contextual_llm_response(user_input, chat_history, intent_tag):
     ---
     The user's latest message is: "{user_input}"
 
-    Based on the full conversation, your task is to provide an empathetic and supportive response.
-    The user seems to be feeling {intent_tag}. 
-    1. First, write 1-2 sentences that acknowledge and validate their feelings in a caring tone.
-    2. Then, in a new paragraph, provide a gentle, actionable suggestion of something they could do to feel a little better based on their feeling.
-    Keep your entire response concise and supportive.
+    Your task is to continue the conversation naturally. Based on the full history,
+    write a short, empathetic, and supportive response that is relevant to what the user just said.
+    Keep your response to 1-3 sentences.
     """
     
     try:
@@ -102,35 +98,42 @@ def get_contextual_llm_response(user_input, chat_history, intent_tag):
         print(f"API Error (Gemini) or parsing error: {e}")
         return "I hear you, and I want you to know it's okay to feel this way."
 
-# --- Main AI Router Logic ---
 def get_response(user_input, chat_history):
-    processed_input = preprocess_sentence(user_input)
-    intent_tag = predict_intent(processed_input)
-    print(f"Predicted Intent: {intent_tag}")
-
-    core_emotions = ['sadness', 'anger', 'anxious', 'stressed', 'confusion', 'motivation']
-    simple_intents = ['greeting', 'goodbye', 'gratitude', 'neutral']
-
-    # Use our ML model for the first user message, or if the user just said hello.
-    is_first_exchange = len(chat_history) <= 1
-    
-    if is_first_exchange and intent_tag in core_emotions:
-        # If the user starts with an emotion, give the full API + base response
-        base_response = random.choice(next(i['responses'] for i in intents['intents'] if i['tag'] == intent_tag))
+    """
+    Main AI router. Uses the ML model for the first user message and escalates
+    to the LLM for all subsequent, contextual follow-ups.
+    """
+    # The history contains the bot's initial greeting (1) and the user's first message (2).
+    # So, if the length is 2, this is the first real turn.
+    if len(chat_history) == 2:
+        print("First user message. Using custom ML model for intent prediction.")
+        processed_input = preprocess_sentence(user_input)
+        intent_tag = predict_intent(processed_input)
+        print(f"Predicted Intent: {intent_tag}")
+        
+        # Get the base response from our JSON file
+        base_response = random.choice(next((i['responses'] for i in intents['intents'] if i['tag'] == intent_tag), ["I'm not sure I understand."]))
+        
+        # Get the API follow-up if it's a core emotion
         api_response = get_api_response(intent_tag)
-        return f"{base_response}\n\n{api_response}" if api_response else base_response
-    
-    elif intent_tag in simple_intents:
-        # For simple intents, use our fast, pre-written responses.
-        return random.choice(next(i['responses'] for i in intents['intents'] if i['tag'] == intent_tag))
+            
+        if api_response:
+            return f"{base_response}\n\n{api_response}"
+        else:
+            return base_response
     else:
-        # For any follow-up or complex emotion, escalate to the LLM.
-        return get_contextual_llm_response(user_input, chat_history, intent_tag)
+        # For all follow-up messages, use the LLM for a contextual response
+        return get_contextual_llm_response(user_input, chat_history)
 
 # This part is for testing the chatbot in the command line
 if __name__ == "__main__":
     chat_history = []
+    
     print("\nChatbot is ready! I'm here to listen. Type 'quit' to exit.")
+    
+    initial_greeting = random.choice(next(intent['responses'] for intent in intents['intents'] if intent['tag'] == 'greeting'))
+    print(f"Bot: {initial_greeting}")
+    chat_history.append(f"Bot: {initial_greeting}")
 
     while True:
         user_input = input("> ")
